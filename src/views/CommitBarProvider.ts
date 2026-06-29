@@ -19,7 +19,9 @@ export class CommitBarProvider implements vscode.WebviewViewProvider {
     try {
       const branch = await this.gitService.getCurrentBranch();
       const ahead = await this.gitService.getAheadBehind();
-      this.view.webview.postMessage({ type: 'branchInfo', branch, ...ahead });
+      const files = await this.gitService.getChangedFiles();
+      const hasChanges = files.some(f => f.status !== 'conflict');
+      this.view.webview.postMessage({ type: 'branchInfo', branch, hasChanges, ...ahead });
     } catch { /* ignore */ }
   }
 
@@ -42,6 +44,17 @@ export class CommitBarProvider implements vscode.WebviewViewProvider {
           return;
         }
         try {
+          // Comme VS 2022 : si rien n'est indexé, on indexe tout avant de committer.
+          const files = await this.gitService.getChangedFiles();
+          const stagedCount = files.filter(f => f.status === 'staged').length;
+          if (stagedCount === 0) {
+            const stageable = files.filter(f => f.status !== 'staged' && f.status !== 'conflict');
+            if (stageable.length === 0) {
+              vscode.window.showWarningMessage('Aucune modification à committer.');
+              return;
+            }
+            await this.gitService.stageAll();
+          }
           await this.gitService.commit(message);
           this.view?.webview.postMessage({ type: 'clearMessage' });
           this.onCommit?.();
@@ -60,7 +73,13 @@ export class CommitBarProvider implements vscode.WebviewViewProvider {
       }
 
       if (msg.type === 'push') {
-        await vscode.commands.executeCommand('git.push');
+        try {
+          await this.gitService.push();
+          this.onCommit?.();
+          vscode.window.showInformationMessage('Push effectué.');
+        } catch (e: any) {
+          vscode.window.showErrorMessage(`Erreur push : ${e.message}`);
+        }
       }
 
       if (msg.type === 'pull') {
@@ -187,20 +206,55 @@ export class CommitBarProvider implements vscode.WebviewViewProvider {
 <textarea id="commit-msg" placeholder="Message de commit (Ctrl+Entrée pour valider)…"></textarea>
 
 <div class="commit-row">
-  <button id="btn-commit" title="Commiter les modifications indexées">
-    <svg viewBox="0 0 16 16"><path d="M6.5 11.4 3.1 8l-1 1 4.4 4.4 8-8-1-1z"/></svg>
-    Commiter
+  <button id="btn-commit">
+    <span id="btn-icon"></span>
+    <span id="btn-label">Commiter</span>
   </button>
 </div>
 
 <script>
   const vscode = acquireVsCodeApi();
 
-  document.getElementById('btn-commit').onclick = () => {
-    vscode.postMessage({ type: 'commit', message: document.getElementById('commit-msg').value });
+  const ICON_COMMIT = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M6.5 11.4 3.1 8l-1 1 4.4 4.4 8-8-1-1z"/></svg>';
+  const ICON_PUSH = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 1 3.5 5.5l1 1L7.3 3.8V13h1.4V3.8l2.8 2.7 1-1L8 1z"/></svg>';
+
+  let state = { ahead: 0, behind: 0, hasChanges: false };
+  const btn = document.getElementById('btn-commit');
+  const btnLabel = document.getElementById('btn-label');
+  const btnIcon = document.getElementById('btn-icon');
+  const msgBox = document.getElementById('commit-msg');
+
+  function mode() {
+    // S'il y a des changements ou un message saisi → commit.
+    // Sinon, s'il y a des commits en avance → push.
+    if (state.hasChanges || msgBox.value.trim()) return 'commit';
+    if (state.ahead > 0) return 'push';
+    return 'commit';
+  }
+
+  function updateButton() {
+    const m = mode();
+    if (m === 'push') {
+      btnLabel.textContent = 'Push' + (state.ahead > 0 ? ' (' + state.ahead + ')' : '');
+      btnIcon.innerHTML = ICON_PUSH;
+      btn.title = 'Publier les commits locaux';
+    } else {
+      btnLabel.textContent = 'Commiter';
+      btnIcon.innerHTML = ICON_COMMIT;
+      btn.title = 'Commiter les modifications';
+    }
+  }
+
+  btn.onclick = () => {
+    if (mode() === 'push') {
+      vscode.postMessage({ type: 'push' });
+    } else {
+      vscode.postMessage({ type: 'commit', message: msgBox.value });
+    }
   };
 
-  document.getElementById('commit-msg').addEventListener('keydown', e => {
+  msgBox.addEventListener('input', updateButton);
+  msgBox.addEventListener('keydown', e => {
     if (e.ctrlKey && e.key === 'Enter') {
       vscode.postMessage({ type: 'commit', message: e.target.value });
     }
@@ -214,11 +268,16 @@ export class CommitBarProvider implements vscode.WebviewViewProvider {
       if (msg.ahead > 0) sync.push('↑' + msg.ahead);
       if (msg.behind > 0) sync.push('↓' + msg.behind);
       document.getElementById('sync-info').textContent = sync.join(' ');
+      state = { ahead: msg.ahead || 0, behind: msg.behind || 0, hasChanges: !!msg.hasChanges };
+      updateButton();
     }
     if (msg.type === 'clearMessage') {
-      document.getElementById('commit-msg').value = '';
+      msgBox.value = '';
+      updateButton();
     }
   });
+
+  updateButton();
 </script>
 </body>
 </html>`;

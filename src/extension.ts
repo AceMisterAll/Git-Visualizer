@@ -86,7 +86,10 @@ async function initGit(
   const svc = new GitService(repo, gitPath);
   changesProvider.setGitService(svc);
   commitsProvider.setGitService(svc);
-  commitBarProvider.setGitService(svc, () => commitsProvider.loadCommits());
+  commitBarProvider.setGitService(svc, () => {
+    commitsProvider.loadCommits();
+    commitBarProvider.updateBranchInfo();
+  });
 
   // ── 3-5. Chargement initial ─────────────────────────────────────────────────
   // Indicateurs : nœud "Chargement…" dans l'arbre (géré par le provider) +

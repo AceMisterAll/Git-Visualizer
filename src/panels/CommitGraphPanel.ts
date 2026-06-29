@@ -51,7 +51,7 @@ export class CommitGraphPanel {
     this.panel.webview.html = this.getHtml(commits, branches, currentBranch, focusHash);
   }
 
-  private async handleMessage(msg: { command: string; branch?: string; hash?: string; path?: string }) {
+  private async handleMessage(msg: { command: string; branch?: string; hash?: string; path?: string; status?: string; hasParent?: boolean }) {
     if (msg.command === 'changeBranch') {
       await this.load();
     } else if (msg.command === 'refresh') {
@@ -60,7 +60,7 @@ export class CommitGraphPanel {
       const files = await this.gitService.getCommitFiles(msg.hash);
       this.panel.webview.postMessage({ type: 'commitFiles', hash: msg.hash, files });
     } else if (msg.command === 'openCommitDiff' && msg.hash && msg.path) {
-      await this.openCommitFileDiff(msg.hash, msg.path);
+      await this.openCommitFileDiff(msg.hash, msg.path, msg.status, msg.hasParent);
     }
   }
 
@@ -74,19 +74,30 @@ export class CommitGraphPanel {
   }
 
   // Diff d'un fichier pour un commit : parent ↔ commit
-  private async openCommitFileDiff(hash: string, filePath: string) {
+  private async openCommitFileDiff(hash: string, filePath: string, status?: string, hasParent?: boolean) {
     const fileUri = vscode.Uri.joinPath(this.gitService.getRepoUri(), filePath);
     const name = filePath.split('/').pop() ?? filePath;
     const short = hash.slice(0, 7);
-    try {
-      await vscode.commands.executeCommand('vscode.diff',
-        this.toGitUri(fileUri, `${hash}^`),
-        this.toGitUri(fileUri, hash),
-        `${name} @ ${short}`, { preview: true });
-    } catch {
-      // commit initial sans parent : ouvrir le contenu du commit
+
+    // Fichier ajouté, ou commit initial sans parent : pas de version précédente
+    // → afficher le contenu du fichier tel qu'il est dans ce commit
+    if (status === 'A' || hasParent === false) {
       await vscode.commands.executeCommand('vscode.open', this.toGitUri(fileUri, hash));
+      return;
     }
+
+    // Fichier supprimé : pas de version dans ce commit
+    // → afficher le contenu du fichier au commit parent
+    if (status === 'D') {
+      await vscode.commands.executeCommand('vscode.open', this.toGitUri(fileUri, `${hash}^`));
+      return;
+    }
+
+    // Fichier modifié : diff parent ↔ commit
+    await vscode.commands.executeCommand('vscode.diff',
+      this.toGitUri(fileUri, `${hash}^`),
+      this.toGitUri(fileUri, hash),
+      `${name} @ ${short}`, { preview: true });
   }
 
   private getLoadingHtml(): string {
@@ -493,7 +504,9 @@ export class CommitGraphPanel {
       row.appendChild(badge);
       row.appendChild(name);
       row.addEventListener('click', () => {
-        vscode.postMessage({ command: 'openCommitDiff', hash: hash, path: f.path });
+        const commit = filteredCommits.find(c => c.hash === hash);
+        const hasParent = !!(commit && commit.parents && commit.parents.length > 0);
+        vscode.postMessage({ command: 'openCommitDiff', hash: hash, path: f.path, status: f.status, hasParent: hasParent });
       });
       container.appendChild(row);
     });

@@ -210,35 +210,60 @@ export class GitService {
   }
 
   async stageFile(uri: vscode.Uri): Promise<void> {
-    await this.repo.add([uri]);
+    await this.run(['add', '--', this.relPath(uri)]);
   }
 
   async stageFiles(uris: vscode.Uri[]): Promise<void> {
-    await this.repo.add(uris);
+    if (uris.length === 0) return;
+    await this.run(['add', '--', ...uris.map(u => this.relPath(u))]);
   }
 
   async unstageFile(uri: vscode.Uri): Promise<void> {
-    await this.repo.revert([uri]);
+    await this.run(['reset', '-q', 'HEAD', '--', this.relPath(uri)]);
   }
 
   async unstageFiles(uris: vscode.Uri[]): Promise<void> {
-    await this.repo.revert(uris);
+    if (uris.length === 0) return;
+    await this.run(['reset', '-q', 'HEAD', '--', ...uris.map(u => this.relPath(u))]);
   }
 
   async discardChanges(uri: vscode.Uri): Promise<void> {
+    // repo.clean gère à la fois la restauration des fichiers suivis
+    // et la suppression des fichiers non-suivis.
     await this.repo.clean([uri]);
   }
 
   async stageAll(): Promise<void> {
-    const all = [
-      ...this.repo.state.workingTreeChanges,
-      ...this.repo.state.mergeChanges,
-    ].map(c => c.uri);
-    if (all.length > 0) await this.repo.add(all);
+    // git add -A : indexe tout (modifiés, ajoutés, supprimés, non-suivis).
+    // Via run() plutôt que repo.add (API VS Code) pour la fiabilité WSL
+    // et pour inclure les fichiers non-suivis (untrackedChanges séparés).
+    await this.run(['add', '-A']);
   }
 
   async commit(message: string): Promise<void> {
-    await this.repo.commit(message);
+    // On passe par run() (execFile -C <repo>) plutôt que l'API VS Code
+    // (repo.commit), qui renvoie un générique « Failed to execute git »
+    // peu fiable, en particulier sur les repos WSL.
+    await this.run(['commit', '-m', message]);
+  }
+
+  async push(): Promise<void> {
+    try {
+      await this.run(['push']);
+    } catch (e: any) {
+      // Pas d'upstream configuré → on le crée au premier push.
+      const msg = String(e?.message ?? '');
+      const branch = this.repo.state.HEAD?.name;
+      if (branch && /upstream|no configured push destination|set-upstream/i.test(msg)) {
+        await this.run(['push', '-u', 'origin', branch]);
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  async pull(): Promise<void> {
+    await this.run(['pull']);
   }
 
   async getFileContentAtHead(filePath: string): Promise<string> {
@@ -398,8 +423,10 @@ export class GitService {
         env,
         windowsHide: true,
       }, (err, stdout, stderr) => {
-        if (err) reject(new Error(stderr?.toString().trim() || err.message));
-        else resolve(stdout.toString());
+        if (err) {
+          const detail = stderr?.toString().trim() || stdout?.toString().trim() || err.message;
+          reject(new Error(detail));
+        } else resolve(stdout.toString());
       });
     });
   }
