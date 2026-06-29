@@ -1,0 +1,272 @@
+{
+  "name": "git-visualizer",
+  "displayName": "Git Visualizer",
+  "description": "Visualisation Git façon Visual Studio 2022 – arborescence des changements, diff côte à côte, graphe de commits",
+  "version": "0.1.0",
+  "publisher": "AceMisterAll",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["SCM Providers"],
+  "activationEvents": [
+    "onView:gitVisualizer.commitBar",
+    "onView:gitVisualizer.changes",
+    "onView:gitVisualizer.commits",
+    "workspaceContains:.git",
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gitVisualizer",
+          "title": "Git Visualizer",
+          "icon": "media/git-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitVisualizer": [
+        {
+          "id": "gitVisualizer.commitBar",
+          "name": "Commit",
+          "type": "webview",
+          "visibility": "visible",
+          "initialSize": 1
+        },
+        {
+          "id": "gitVisualizer.changes",
+          "name": "Changements",
+          "initialSize": 12
+        },
+        {
+          "id": "gitVisualizer.commits",
+          "name": "Historique",
+          "type": "webview",
+          "initialSize": 10
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gitVisualizer.refresh",
+        "title": "Actualiser",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitVisualizer.openFile",
+        "title": "Ouvrir",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "gitVisualizer.openDiff",
+        "title": "Ouvrir les modifications"
+      },
+      {
+        "command": "gitVisualizer.stageFile",
+        "title": "Indexer le fichier",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitVisualizer.unstageFile",
+        "title": "Désindexer le fichier",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitVisualizer.discardChanges",
+        "title": "Annuler les modifications",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gitVisualizer.commit",
+        "title": "Commiter",
+        "icon": "$(check)"
+      },
+      {
+        "command": "gitVisualizer.openCommitGraph",
+        "title": "Ouvrir le graphe de commits",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "gitVisualizer.stageAll",
+        "title": "Tout indexer",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitVisualizer.pull",
+        "title": "Pull (récupérer)",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "gitVisualizer.push",
+        "title": "Push (publier)",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "gitVisualizer.createPR",
+        "title": "Créer une Pull Request",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "gitVisualizer.stageGroup",
+        "title": "Indexer ce groupe",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitVisualizer.unstageGroup",
+        "title": "Désindexer ce groupe",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "gitVisualizer.discardAll",
+        "title": "Tout annuler",
+        "icon": "$(discard)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitVisualizer.stageAll",
+          "when": "view == gitVisualizer.commitBar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitVisualizer.pull",
+          "when": "view == gitVisualizer.commitBar",
+          "group": "navigation@3"
+        },
+        {
+          "command": "gitVisualizer.push",
+          "when": "view == gitVisualizer.commitBar",
+          "group": "navigation@4"
+        },
+        {
+          "command": "gitVisualizer.createPR",
+          "when": "view == gitVisualizer.commitBar",
+          "group": "navigation@5"
+        },
+        {
+          "command": "gitVisualizer.openCommitGraph",
+          "when": "view == gitVisualizer.commitBar",
+          "group": "navigation@6"
+        },
+        {
+          "command": "gitVisualizer.refresh",
+          "when": "view == gitVisualizer.changes",
+          "group": "navigation"
+        },
+        {
+          "command": "gitVisualizer.commit",
+          "when": "view == gitVisualizer.changes",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitVisualizer.openCommitGraph",
+          "when": "view == gitVisualizer.changes",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitVisualizer.openCommitGraph",
+          "when": "view == gitVisualizer.commits",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitVisualizer.refresh",
+          "when": "view == gitVisualizer.commits",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitVisualizer.openFile",
+          "when": "view == gitVisualizer.changes && (viewItem == staged || viewItem == unstaged || viewItem == untracked)",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitVisualizer.openDiff",
+          "when": "view == gitVisualizer.changes && (viewItem == staged || viewItem == unstaged)",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitVisualizer.stageFile",
+          "when": "view == gitVisualizer.changes && (viewItem == unstaged || viewItem == untracked)",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "gitVisualizer.unstageFile",
+          "when": "view == gitVisualizer.changes && viewItem == staged",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "gitVisualizer.discardChanges",
+          "when": "view == gitVisualizer.changes && (viewItem == unstaged || viewItem == untracked)",
+          "group": "1_modification@2"
+        },
+        {
+          "command": "gitVisualizer.stageFile",
+          "when": "view == gitVisualizer.changes && (viewItem == unstaged || viewItem == untracked)",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitVisualizer.discardChanges",
+          "when": "view == gitVisualizer.changes && (viewItem == unstaged || viewItem == untracked)",
+          "group": "inline@2"
+        },
+        {
+          "command": "gitVisualizer.unstageFile",
+          "when": "view == gitVisualizer.changes && viewItem == staged",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitVisualizer.stageGroup",
+          "when": "view == gitVisualizer.changes && viewItem == group-working",
+          "group": "inline@1"
+        },
+        {
+          "command": "gitVisualizer.unstageGroup",
+          "when": "view == gitVisualizer.changes && viewItem == group-staged",
+          "group": "inline@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Git Visualizer",
+      "properties": {
+        "gitVisualizer.maxCommits": {
+          "type": "number",
+          "default": 200,
+          "description": "Nombre maximum de commits à afficher dans le graphe"
+        },
+        "gitVisualizer.showAllBranches": {
+          "type": "boolean",
+          "default": true,
+          "description": "Afficher toutes les branches dans le graphe"
+        },
+        "gitVisualizer.groupByFolder": {
+          "type": "boolean",
+          "default": true,
+          "description": "Grouper les fichiers par dossier"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "compile": "tsc --noEmit",
+    "package": "npx --yes @vscode/vsce package"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AceMisterAll/git-visualizer"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3"
+  }
+}
