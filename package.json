@@ -8,11 +8,8 @@
     "vscode": "^1.90.0"
   },
   "categories": ["SCM Providers"],
+  "icon": "media/logo.png",
   "activationEvents": [
-    "onView:gitVisualizer.commitBar",
-    "onView:gitVisualizer.changes",
-    "onView:gitVisualizer.commits",
-    "workspaceContains:.git",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -61,7 +58,8 @@
       },
       {
         "command": "gitVisualizer.openDiff",
-        "title": "Ouvrir les modifications"
+        "title": "Ouvrir les modifications",
+        "icon": "$(diff)"
       },
       {
         "command": "gitVisualizer.stageFile",

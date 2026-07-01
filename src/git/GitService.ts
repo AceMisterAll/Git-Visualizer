@@ -58,6 +58,7 @@ interface GitRepository {
   clean(uris: vscode.Uri[]): Promise<void>;
   commit(message: string): Promise<void>;
   checkout(treeish: string): Promise<void>;
+  status(): Promise<void>;
 }
 
 interface GitAPI {
@@ -114,15 +115,19 @@ export class GitService {
   }
 
   // Chemin relatif robuste basé sur uri.path (toujours en '/'),
-  // fonctionne pour Windows local, WSL (\\wsl.localhost), et remote
+  // fonctionne pour Windows local, WSL (\\wsl.localhost), et remote.
+  // Comparaison insensible à la casse : VS Code peut renvoyer la lettre
+  // de lecteur avec une casse différente (/c:/ vs /C:/), ce qui ferait
+  // échouer un startsWith sensible à la casse et produirait un chemin absolu.
   private relPath(uri: vscode.Uri): string {
     const root = this.repo.rootUri.path.replace(/\/+$/, '');
-    let p = uri.path;
-    if (p.startsWith(root + '/')) {
+    const p = uri.path;
+    const rootLC = root.toLowerCase();
+    const pLC = p.toLowerCase();
+    if (pLC.startsWith(rootLC + '/')) {
       return p.slice(root.length + 1);
     }
-    // Fallback : retirer le préfixe commun si présent
-    if (p.startsWith(root)) {
+    if (pLC.startsWith(rootLC)) {
       return p.slice(root.length).replace(/^\/+/, '');
     }
     return p.replace(/^\/+/, '');
@@ -209,28 +214,39 @@ export class GitService {
     return map[status] ?? '?';
   }
 
+  // Force l'API git de VS Code à relire son état après une mutation CLI,
+  // sinon repo.state reste périmé jusqu'au prochain cycle du file-watcher.
+  private async syncState(): Promise<void> {
+    try { await this.repo.status(); } catch { /* ignore */ }
+  }
+
   async stageFile(uri: vscode.Uri): Promise<void> {
     await this.run(['add', '--', this.relPath(uri)]);
+    await this.syncState();
   }
 
   async stageFiles(uris: vscode.Uri[]): Promise<void> {
     if (uris.length === 0) return;
     await this.run(['add', '--', ...uris.map(u => this.relPath(u))]);
+    await this.syncState();
   }
 
   async unstageFile(uri: vscode.Uri): Promise<void> {
     await this.run(['reset', '-q', 'HEAD', '--', this.relPath(uri)]);
+    await this.syncState();
   }
 
   async unstageFiles(uris: vscode.Uri[]): Promise<void> {
     if (uris.length === 0) return;
     await this.run(['reset', '-q', 'HEAD', '--', ...uris.map(u => this.relPath(u))]);
+    await this.syncState();
   }
 
   async discardChanges(uri: vscode.Uri): Promise<void> {
     // repo.clean gère à la fois la restauration des fichiers suivis
     // et la suppression des fichiers non-suivis.
     await this.repo.clean([uri]);
+    await this.syncState();
   }
 
   async stageAll(): Promise<void> {
@@ -238,6 +254,7 @@ export class GitService {
     // Via run() plutôt que repo.add (API VS Code) pour la fiabilité WSL
     // et pour inclure les fichiers non-suivis (untrackedChanges séparés).
     await this.run(['add', '-A']);
+    await this.syncState();
   }
 
   async commit(message: string): Promise<void> {
@@ -245,6 +262,7 @@ export class GitService {
     // (repo.commit), qui renvoie un générique « Failed to execute git »
     // peu fiable, en particulier sur les repos WSL.
     await this.run(['commit', '-m', message]);
+    await this.syncState();
   }
 
   async push(): Promise<void> {
