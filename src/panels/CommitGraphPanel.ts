@@ -39,21 +39,32 @@ export class CommitGraphPanel {
     await CommitGraphPanel.instance.load(focusHash);
   }
 
-  private async load(focusHash?: string) {
+  private selectedBranch = '';
+
+  static refreshIfOpen() {
+    if (CommitGraphPanel.instance) {
+      CommitGraphPanel.instance.load();
+    }
+  }
+
+  private async load(focusHash?: string, branch?: string) {
+    if (branch !== undefined) this.selectedBranch = branch;
     this.panel.webview.html = this.getLoadingHtml();
 
+    const max = vscode.workspace.getConfiguration('gitVisualizer').get('maxCommits', 200);
+    const useAll = !this.selectedBranch; // "Toutes les branches" → --all
     const [commits, branches, currentBranch] = await Promise.all([
-      this.gitService.getCommits('', vscode.workspace.getConfiguration('gitVisualizer').get('maxCommits', 200)),
+      this.gitService.getCommits(this.selectedBranch, max, useAll),
       this.gitService.getBranches(),
       this.gitService.getCurrentBranch(),
     ]);
 
-    this.panel.webview.html = this.getHtml(commits, branches, currentBranch, focusHash);
+    this.panel.webview.html = this.getHtml(commits, branches, currentBranch, focusHash, this.selectedBranch);
   }
 
   private async handleMessage(msg: { command: string; branch?: string; hash?: string; path?: string; status?: string; hasParent?: boolean }) {
     if (msg.command === 'changeBranch') {
-      await this.load();
+      await this.load(undefined, msg.branch ?? '');
     } else if (msg.command === 'refresh') {
       await this.load(msg.hash);
     } else if (msg.command === 'getFiles' && msg.hash) {
@@ -105,7 +116,7 @@ export class CommitGraphPanel {
       <div>Chargement du graphe...</div></body></html>`;
   }
 
-  private getHtml(commits: GitCommit[], branches: BranchInfo[], currentBranch: string, focusHash?: string): string {
+  private getHtml(commits: GitCommit[], branches: BranchInfo[], currentBranch: string, focusHash?: string, selectedBranch: string = ''): string {
     const commitsJson = JSON.stringify(commits);
     const branchesJson = JSON.stringify(branches);
 
@@ -210,6 +221,7 @@ export class CommitGraphPanel {
   const COMMITS = ${commitsJson};
   const BRANCHES = ${branchesJson};
   const CURRENT_BRANCH = ${JSON.stringify(currentBranch)};
+  const SELECTED_BRANCH = ${JSON.stringify(selectedBranch)};
   const FOCUS_HASH = ${JSON.stringify(focusHash ?? null)};
   const ROW_HEIGHT = 28;
   const GRAPH_COL_WIDTH = 14;
@@ -220,15 +232,23 @@ export class CommitGraphPanel {
   let graphLayout = [];
   let maxLane = 0;
 
-  // Populate branch selector
+  // Populate branch selector : locales d'abord, puis distantes "(distant)"
   const branchSelect = document.getElementById('branch-select');
-  BRANCHES.filter(b => !b.isRemote).forEach(b => {
+  const locals = BRANCHES.filter(b => !b.isRemote);
+  const remotes = BRANCHES.filter(b => b.isRemote);
+  [...locals, ...remotes].forEach(b => {
     const opt = document.createElement('option');
     opt.value = b.name;
-    opt.textContent = (b.isCurrent ? '● ' : '') + b.name;
-    if (b.isCurrent) opt.selected = true;
+    if (b.isRemote) {
+      // remotes/origin/main → origin/main (distant)
+      opt.textContent = b.name.replace(/^remotes\\//, '') + ' (distant)';
+    } else {
+      opt.textContent = (b.isCurrent ? '● ' : '') + b.name;
+    }
+    if (b.name === SELECTED_BRANCH) opt.selected = true;
     branchSelect.appendChild(opt);
   });
+  if (!SELECTED_BRANCH) branchSelect.value = '';
 
   // Compute graph layout (lane assignment)
   function computeLayout(commits) {

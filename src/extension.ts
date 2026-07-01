@@ -89,6 +89,7 @@ async function initGit(
   commitBarProvider.setGitService(svc, () => {
     commitsProvider.loadCommits();
     commitBarProvider.updateBranchInfo();
+    CommitGraphPanel.refreshIfOpen();
   });
 
   // ── 3-5. Chargement initial ─────────────────────────────────────────────────
